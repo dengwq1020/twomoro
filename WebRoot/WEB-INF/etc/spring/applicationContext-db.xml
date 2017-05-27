@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context.xsd
+    http://www.springframework.org/schema/aop
+    http://www.springframework.org/schema/aop/spring-aop.xsd
+    http://www.springframework.org/schema/tx
+    http://www.springframework.org/schema/tx/spring-tx.xsd">
+
+	<description>Spring Config - DATABASE</description>	
+	
+	<!-- 启用CGliB -->
+    <aop:aspectj-autoproxy proxy-target-class="true"/>
+    
+ 	<context:component-scan base-package="com.xiyi.service.impl" />		
+    
+    <bean id="propertyConfigurer" class="com.xiyi.util.config.CustomPropertyPlaceholderConfigurer">
+		<property name="locations">
+			<list>
+				<value>classpath*:*.properties</value>
+			</list>
+		</property>
+	</bean>
+	
+	<!-- base dataSource -->
+    <bean name="dataSource" class="com.alibaba.druid.pool.DruidDataSource" init-method="init" destroy-method="close">
+    	<property name="driverClassName" value="${jdbc.driverClass}" />
+        <property name="url" value="${jdbc.jdbcUrl}" />
+        <property name="username" value="${jdbc.user}" />
+        <property name="password" value="${jdbc.password}" />
+        
+        <!-- 配置监控统计拦截的filters，去掉后监控界面sql无法统计 -->  
+    	<property name="filters" value="stat,mergeStat,wall,slf4j" />   
+        
+        <property name="initialSize" value="5" />
+        <property name="maxActive" value="100" />
+        <property name="minIdle" value="10" />
+        <property name="maxWait" value="60000" />
+        <property name="validationQuery" value="SELECT 'x'" />
+        <property name="testOnBorrow" value="true" />
+        <property name="testOnReturn" value="true" />
+        <property name="testWhileIdle" value="true" />
+        <property name="timeBetweenEvictionRunsMillis" value="60000" />
+        <property name="minEvictableIdleTimeMillis" value="300000" />
+        <property name="removeAbandoned" value="true" />
+        <property name="removeAbandonedTimeout" value="1800" />
+        <property name="logAbandoned" value="true" />
+        
+		<property name="proxyFilters"> 
+			<list> 
+				 <ref bean="logFilter" /> 
+			</list> 
+		</property> 
+    </bean>
+	<bean id="logFilter" class="com.alibaba.druid.filter.logging.Slf4jLogFilter"> 
+		<property name="statementExecutableSqlLogEnable" value="false" /> 
+	</bean>
+	
+	<!-- Spring整合Mybatis -->
+    <bean id="sqlSessionFactory" class="com.baomidou.mybatisplus.spring.MybatisSqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource"/>
+        <!-- 自动扫描Mapping.xml文件 -->
+        <property name="mapperLocations" value="classpath*:/mybatis/sqlMapperXml/*.xml"></property>
+        <property name="configLocation" value="classpath:/mybatis/mybatis-config.xml"></property>
+        <property name="typeAliasesPackage" value="com.xiyi.model"/>
+        <property name="plugins">
+            <array>
+                <!-- 分页插件配置 -->
+                <bean id="paginationInterceptor" class="com.baomidou.mybatisplus.plugins.PaginationInterceptor">
+                    <property name="dialectType" value="mysql"/>
+                </bean>
+            </array>
+        </property>
+    </bean>
+
+    <!-- MyBatis 动态实现  -->
+    <bean id="mapperScannerConfigurer" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <!-- 对Dao 接口动态实现，需要知道接口在哪  -->
+        <property name="basePackage" value="com.xiyi.mapper"/>
+    </bean>
+	
+	<!-- JDBCtemplate -->
+	<bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+		<property name="dataSource">
+			<ref bean="dataSource"/>
+		</property>
+	</bean>
+ 
+	<!-- JDBC事务管理器 -->
+	<bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+
+	<bean id="transactionTemplate" class="org.springframework.transaction.support.TransactionTemplate">
+		<property name="transactionManager" ref="transactionManager"/>
+	</bean>
+
+	<!-- enables scanning for @Transactional annotations-->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+
+	<!-- 事务的传播特性-->
+	<tx:advice id="txAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+            <tx:method name="select*" propagation="REQUIRED" read-only="true" />
+            <tx:method name="delete*" propagation="REQUIRED" rollback-for="Exception" />
+            <tx:method name="update*" propagation="REQUIRED" rollback-for="Exception" />
+            <tx:method name="insert*" propagation="REQUIRED" rollback-for="Exception" />
+            <tx:method name="*" propagation="REQUIRED" />
+		</tx:attributes>
+	</tx:advice>
+	
+	<!-- 哪些类哪些方法使用事务-->
+	<aop:config>
+		<aop:pointcut expression="execution(* com.yyqj.xiyi.manager.service.impl.*.*(..)) || execution(* com.xiyi.manager.dao.impl.*.*(..))" id="transactionPC"/>
+		<aop:advisor pointcut-ref="transactionPC"  advice-ref="txAdvice" />
+	</aop:config>
+	
+	
+	<!--  reids -->
+	<bean id="shardedJedisPool" class="redis.clients.jedis.ShardedJedisPool">  
+       <constructor-arg index="0" ref="jedisPoolConfig"/>  
+       <constructor-arg index="1">  
+           <list>   
+                <bean name="master" class="redis.clients.jedis.JedisShardInfo">  
+                   <constructor-arg index="0" value="${redis.host}"/>  
+                   <constructor-arg index="1" value="${redis.port}" type="int"/>  
+               </bean>  
+           </list>  
+       </constructor-arg>  
+   </bean>  
+  
+   <bean id="jedisPoolConfig" class="redis.clients.jedis.JedisPoolConfig">  
+       <property name="maxTotal" value="2048" />  
+       <property name="maxIdle" value="200" />  
+       <property name="numTestsPerEvictionRun" value="1024"/>  
+       <property name="timeBetweenEvictionRunsMillis" value="30000" />  
+       <property name="minEvictableIdleTimeMillis" value="-1" />  
+       <property name="softMinEvictableIdleTimeMillis" value="10000" />  
+       <property name="maxWaitMillis" value="1500"/>  
+       <property name="testOnBorrow" value="true" />  
+       <property name="testWhileIdle" value="true"/>  
+       <property name="testOnReturn" value="false"/>  
+       <property name="jmxEnabled" value="true"/>  
+       <property name="jmxNamePrefix" value="youyuan"/>  
+       <property name="blockWhenExhausted" value="false"/>  
+   </bean>
+   
+
+</beans>
