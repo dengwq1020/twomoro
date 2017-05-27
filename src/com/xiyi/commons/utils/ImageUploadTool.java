@@ -23,8 +23,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.multipart.commons.CommonsMultipartResolver;
-
-import com.xiyi.manager.controller.AdminController;
 import com.xiyi.util.config.WebAppConfig;
 
 public class ImageUploadTool{
